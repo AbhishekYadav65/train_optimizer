@@ -1,0 +1,4 @@
+{
+  "blocks": ["A-B", "B-C", "loop1"],
+  "platforms": ["P1", "P2"]
+}
