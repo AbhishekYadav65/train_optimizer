@@ -1,5 +1,5 @@
 # app.py
-# Hybrid Optimizer + Polished UI — demo-ready
+# AI Train Traffic Optimizer — Optimized Hybrid (SIH Edition)
 
 import streamlit as st
 import pandas as pd
@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import random, copy, time
 
 # --- Page configuration ---
-st.set_page_config(layout="wide", page_title="AI Train Traffic Optimizer (Hybrid + UI)")
+st.set_page_config(layout="wide", page_title="AI Train Traffic Optimizer — Optimized Hybrid")
 
 # --- Grid config ---
 GRID_ROWS, GRID_COLS = 3, 6
@@ -19,8 +19,8 @@ for r in range(GRID_ROWS):
         blocks.append(bid)
         block_coords[bid] = (c * 1.6, (GRID_ROWS - 1 - r) * 1.0)
 
-# --- Load dataset ---
-trains_df = pd.read_csv("trains.csv")
+# --- Load congested dataset ---
+trains_df = pd.read_csv("trains_demo.csv")   # use your new 36-train dataset
 
 # --- Train class ---
 class Train:
@@ -54,7 +54,7 @@ def plan_path(train, row=None):
         row = random.choice(range(GRID_ROWS))
     return [f"B{row}-{c}" for c in range(GRID_COLS)]
 
-SPEED_MAP = {"Express": 0.55, "Local": 0.35, "Freight": 0.2}
+SPEED_MAP = {"Express": 0.6, "Local": 0.35, "Freight": 0.25}
 
 # --- Init / Reset environment ---
 def init_trains():
@@ -74,12 +74,9 @@ def reset_environment(preset=None):
         st.session_state.block_occupancy[t.path[t.path_index]] = t.id
 
     if preset == "rush":
-        # Move Express trains to start early
         for t in st.session_state.trains:
-            if t.type.lower() == "express":
-                t.start_time = random.randint(0,2)
+            t.start_time = random.randint(0,2)
     elif preset == "freight":
-        # Freight priority: make freight start early
         for t in st.session_state.trains:
             if t.type.lower() == "freight":
                 t.start_time = random.randint(0,2)
@@ -94,11 +91,11 @@ def remaining_blocks(t):
     return max(0, len(t.path) - 1 - t.path_index)
 
 def score_train(t):
-    # This is your previously working hybrid scoring + rollout
-    ALPHA, BETA, GAMMA = 120, 6, 4
-    return ALPHA * t.priority - BETA * t.delay - GAMMA * remaining_blocks(t)
+    # Tuned scoring for SIH demo
+    ALPHA, BETA, GAMMA, DELTA = 150, 20, 8, 10
+    return ALPHA * t.priority - BETA * t.delay - GAMMA * remaining_blocks(t) + DELTA * SPEED_MAP.get(t.type, 0.3)
 
-# --- Hybrid + 1-step Rollout conflict resolver (good version) ---
+# --- Conflict resolution ---
 def greedy_conflict_resolution(requests):
     actions = {}
     for block, conts in requests.items():
@@ -178,15 +175,12 @@ def run_tick():
     except Exception:
         actions = greedy_conflict_resolution(requests)
 
-    # ensure at least one proceeds
     if not any(act == "proceed" for act in actions.values()):
-        # choose the most urgent train
         active = [t for t in st.session_state.trains if not t.finished and st.session_state.tick >= t.start_time]
         if active:
             critical = max(active, key=lambda t: (t.priority, t.delay, -t.start_time))
             actions[critical.id] = "proceed"
 
-    # apply actions
     for t in st.session_state.trains:
         act = actions.get(t.id, "hold")
         t.action = act
@@ -235,7 +229,6 @@ def draw_grid(trains):
             dx, dy = x_cur, y_cur + 0.12
         ax.scatter(dx, dy, s=220, color=cmap.get(t.type, "#666"))
         ax.text(dx, dy, str(t.id), ha="center", va="center", fontsize=8, color="white", weight="bold")
-    # legend
     for i, (k, v) in enumerate(cmap.items()):
         ax.scatter([], [], s=120, color=v, label=k)
     ax.legend(loc="upper right")
@@ -243,10 +236,10 @@ def draw_grid(trains):
     ax.set_ylim(-1.2, GRID_ROWS * 1.2)
     return fig
 
-# --- UI layout / polish ---
-st.title("🚄 AI Train Traffic Optimizer — Hybrid + UI")
+# --- UI Layout ---
+st.title("🚄 AI Train Traffic Optimizer — Optimized Hybrid")
 
-col1, col2, col3 = st.columns([2.5, 5, 2.5])
+col1, col2, col3 = st.columns([2, 5, 2])
 
 with col1:
     st.subheader("🎮 Controls")
@@ -257,12 +250,9 @@ with col1:
     if st.button("🔄 Reset"):
         reset_environment()
     st.subheader("⚠️ Scenarios")
-    if st.button("Rush Hour"):
-        reset_environment("rush")
-    if st.button("Freight Priority"):
-        reset_environment("freight")
-    if st.button("Disruption"):
-        reset_environment("disruption")
+    if st.button("Rush Hour"): reset_environment("rush")
+    if st.button("Freight Priority"): reset_environment("freight")
+    if st.button("Disruption"): reset_environment("disruption")
 
 with col2:
     st.subheader("📍 Track Visualization")
@@ -283,9 +273,7 @@ with col3:
 
 st.markdown("---")
 st.subheader("🚆 Train States")
-rows = []
-for t in st.session_state.trains:
-    rows.append({"Train ID": t.id, "Type": t.type, "Block": t.path[t.path_index], "Delay": t.delay, "Action": t.action})
+rows = [{"Train ID": t.id, "Type": t.type, "Block": t.path[t.path_index], "Delay": t.delay, "Action": t.action} for t in st.session_state.trains]
 st.table(pd.DataFrame(rows))
 
 st.markdown("---")
@@ -294,7 +282,7 @@ if st.button("▶ Run Full Simulation Comparison"):
     def simulate(strategy="baseline"):
         trains_copy = [t.copy_basic() for t in st.session_state.trains]
         tick = 0
-        max_ticks = 400
+        max_ticks = 500
         while any(not t.finished for t in trains_copy) and tick < max_ticks:
             requests = {}
             for t in trains_copy:
@@ -343,7 +331,7 @@ if st.button("▶ Run Full Simulation Comparison"):
     opt_avg, opt_tp, opt_rate = simulate("hybrid")
 
     comp = pd.DataFrame({
-        "Strategy": ["Baseline (FCFS)", "Hybrid"],
+        "Strategy": ["Baseline (FCFS)", "Hybrid (Optimized Rollout)"],
         "Avg Delay (min)": [base_avg, opt_avg],
         "Throughput": [base_tp, opt_tp],
         "Punctuality %": [base_rate, opt_rate]
